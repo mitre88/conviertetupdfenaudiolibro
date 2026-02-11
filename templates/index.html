@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📚 PDF a Audiolibro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .dropzone {
+            border: 3px dashed #cbd5e1;
+            transition: all 0.3s ease;
+        }
+        .dropzone:hover, .dropzone.dragover {
+            border-color: #3b82f6;
+            background: #eff6ff;
+        }
+        .step {
+            display: none;
+        }
+        .step.active {
+            display: block;
+            animation: fadeIn 0.4s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .loading {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-3xl">
+        <!-- Header -->
+        <header class="text-center mb-10">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">📚 PDF a Audiolibro</h1>
+            <p class="text-gray-600">Convierte tus libros y documentos PDF en audiolibros</p>
+        </header>
+
+        <!-- Paso 1: Upload -->
+        <div id="step-1" class="step active bg-white rounded-2xl shadow-xl p-8">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6 text-center">1. Sube tu PDF</h2>
+            
+            <div id="dropzone" class="dropzone rounded-xl p-12 text-center cursor-pointer">
+                <div class="text-6xl mb-4">📄</div>
+                <p class="text-lg text-gray-600 mb-2">Arrastra tu PDF aquí o haz clic para seleccionar</p>
+                <p class="text-sm text-gray-400">PDF con texto seleccionable (no escaneados)</p>
+                <input type="file" id="file-input" accept=".pdf" class="hidden">
+            </div>
+
+            <div id="upload-loading" class="hidden mt-6 text-center">
+                <div class="text-4xl mb-3 loading">⏳</div>
+                <p class="text-gray-600">Extrayendo texto del PDF...</p>
+            </div>
+        </div>
+
+        <!-- Paso 2: Preview y Config -->
+        <div id="step-2" class="step bg-white rounded-2xl shadow-xl p-8">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">2. Revisa y Configura</h2>
+            
+            <div class="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p class="text-green-700 text-sm">✅ <span id="filename-display"></span> - Texto extraído correctamente</p>
+                <p class="text-green-600 text-xs mt-1"><span id="char-count"></span> caracteres</p>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Voz del narrador</label>
+                <select id="voice-select" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="es-MX-JorgeNeural">🇲🇽 Jorge (Masculino - Latinoamérica)</option>
+                    <option value="es-MX-DaliaNeural">🇲🇽 Dalia (Femenino - Latinoamérica)</option>
+                    <option value="es-ES-AlvaroNeural">🇪🇸 Álvaro (Masculino - España)</option>
+                    <option value="es-ES-ElviraNeural">🇪🇸 Elvira (Femenino - España)</option>
+                    <option value="es-AR-TomasNeural">🇦🇷 Tomás (Masculino - Argentina)</option>
+                    <option value="es-AR-ElenaNeural">🇦🇷 Elena (Femenino - Argentina)</option>
+                </select>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Preview del contenido</label>
+                <div class="bg-gray-50 p-4 rounded-lg max-h-48 overflow-y-auto text-sm text-gray-600 font-mono">
+                    <span id="text-preview"></span>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="resetApp()" class="flex-1 py-3 px-4 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">
+                    ← Subir otro
+                </button>
+                <button onclick="startConversion()" class="flex-1 py-3 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium">
+                    🎙️ Crear Audiolibro
+                </button>
+            </div>
+        </div>
+
+        <!-- Paso 3: Convirtiendo -->
+        <div id="step-3" class="step bg-white rounded-2xl shadow-xl p-8">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6 text-center">3. Generando Audiolibro</h2>
+            
+            <div class="text-center">
+                <div class="text-6xl mb-4 loading">🎙️</div>
+                <p class="text-gray-600 mb-2">Convirtiendo texto a audio...</p>
+                <p class="text-sm text-gray-400">Esto puede tomar unos minutos dependiendo del tamaño</p>
+                
+                <div class="mt-6 max-w-md mx-auto bg-gray-200 rounded-full h-3">
+                    <div id="progress-bar" class="progress-bar bg-blue-600 h-3 rounded-full" style="width: 0%"></div>
+                </div>
+                <p id="progress-text" class="text-sm text-gray-500 mt-2">0%</p>
+            </div>
+        </div>
+
+        <!-- Paso 4: Descarga -->
+        <div id="step-4" class="step bg-white rounded-2xl shadow-xl p-8">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-6 text-center">🎉 ¡Listo!</h2>
+            
+            <div class="text-center">
+                <div class="text-6xl mb-4">🎧</div>
+                <p class="text-gray-600 mb-6">Tu audiolibro está listo para descargar</p>
+                
+                <a id="download-link" href="#" class="inline-block py-4 px-8 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium text-lg">
+                    ⬇️ Descargar MP3
+                </a>
+                
+                <div class="mt-6">
+                    <audio id="audio-preview" controls class="w-full max-w-md mx-auto"></audio>
+                </div>
+                
+                <button onclick="resetApp()" class="mt-6 py-2 px-4 text-blue-600 hover:text-blue-800 transition">
+                    ← Convertir otro PDF
+                </button>
+            </div>
+        </div>
+
+        <!-- Error -->
+        <div id="error-message" class="hidden mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-center"></div>
+    </div>
+
+    <script>
+        let currentJobId = null;
+        let progressInterval = null;
+
+        // Drag & Drop
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('file-input');
+
+        dropzone.addEventListener('click', () => fileInput.click());
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        async function handleFile(file) {
+            if (!file.name.endsWith('.pdf')) {
+                showError('Por favor selecciona un archivo PDF');
+                return;
+            }
+
+            document.getElementById('upload-loading').classList.remove('hidden');
+            hideError();
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Error al procesar el PDF');
+                }
+
+                const data = await response.json();
+                currentJobId = data.job_id;
+
+                // Mostrar preview
+                document.getElementById('filename-display').textContent = data.filename;
+                document.getElementById('char-count').textContent = data.total_chars.toLocaleString();
+                document.getElementById('text-preview').textContent = data.preview;
+
+                // Ir al paso 2
+                showStep(2);
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                document.getElementById('upload-loading').classList.add('hidden');
+            }
+        }
+
+        async function startConversion() {
+            if (!currentJobId) return;
+
+            const voice = document.getElementById('voice-select').value;
+            
+            showStep(3);
+
+            // Simular progreso
+            let progress = 0;
+            progressInterval = setInterval(() => {
+                progress += Math.random() * 5;
+                if (progress > 90) progress = 90;
+                updateProgress(progress);
+            }, 1000);
+
+            try {
+                const response = await fetch('/convert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ job_id: currentJobId, voice: voice })
+                });
+
+                clearInterval(progressInterval);
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Error al generar audio');
+                }
+
+                updateProgress(100);
+
+                const data = await response.json();
+                
+                // Configurar descarga
+                document.getElementById('download-link').href = data.audio_url;
+                document.getElementById('audio-preview').src = data.audio_url;
+                
+                showStep(4);
+            } catch (error) {
+                clearInterval(progressInterval);
+                showError(error.message);
+                showStep(2);
+            }
+        }
+
+        function updateProgress(percent) {
+            document.getElementById('progress-bar').style.width = percent + '%';
+            document.getElementById('progress-text').textContent = Math.round(percent) + '%';
+        }
+
+        function showStep(step) {
+            document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+            document.getElementById('step-' + step).classList.add('active');
+        }
+
+        function resetApp() {
+            currentJobId = null;
+            fileInput.value = '';
+            hideError();
+            showStep(1);
+        }
+
+        function showError(message) {
+            const errorEl = document.getElementById('error-message');
+            errorEl.textContent = '❌ ' + message;
+            errorEl.classList.remove('hidden');
+        }
+
+        function hideError() {
+            document.getElementById('error-message').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
