@@ -11,6 +11,9 @@ from typing import Optional
 
 import pdfplumber
 import edge_tts
+import pytesseract
+from pdf2image import convert_from_path
+from PIL import Image
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -43,18 +46,46 @@ VOICES = {
 }
 
 
-def extract_text_from_pdf(pdf_path: Path) -> str:
-    """Extrae texto de un PDF usando pdfplumber."""
+def extract_text_with_ocr(pdf_path: Path) -> str:
+    """Extrae texto de un PDF escaneado usando OCR con pytesseract."""
     text_parts = []
     try:
-        with pdfplumber.open(pdf_path) as pdf:
-            for page_num, page in enumerate(pdf.pages, 1):
-                page_text = page.extract_text()
-                if page_text:
-                    text_parts.append(f"\n--- Página {page_num} ---\n{page_text}")
+        # Convertir PDF a imágenes
+        images = convert_from_path(str(pdf_path), dpi=200)
+        
+        for page_num, image in enumerate(images, 1):
+            # Extraer texto de la imagen usando OCR
+            page_text = pytesseract.image_to_string(image, lang='spa')
+            if page_text.strip():
+                text_parts.append(f"\n--- Página {page_num} ---\n{page_text}")
+        
         return "\n".join(text_parts)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error extrayendo texto: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error en OCR: {str(e)}")
+
+
+def extract_text_from_pdf(pdf_path: Path, use_ocr: bool = False) -> str:
+    """Extrae texto de un PDF usando pdfplumber o OCR según el caso."""
+    text_parts = []
+    
+    # Si se fuerza OCR, saltar pdfplumber
+    if not use_ocr:
+        try:
+            with pdfplumber.open(pdf_path) as pdf:
+                for page_num, page in enumerate(pdf.pages, 1):
+                    page_text = page.extract_text()
+                    if page_text:
+                        text_parts.append(f"\n--- Página {page_num} ---\n{page_text}")
+            
+            # Si pdfplumber extrajo texto suficiente, usar ese
+            full_text = "\n".join(text_parts)
+            if len(full_text.strip()) > 100:
+                return full_text
+        except Exception as e:
+            pass  # Si falla, intentar OCR
+    
+    # Usar OCR (para PDFs escaneados o si pdfplumber no resultó)
+    return extract_text_with_ocr(pdf_path)
 
 
 async def text_to_speech(text: str, voice: str, output_path: Path) -> None:
@@ -98,8 +129,8 @@ async def index(request: Request):
 
 
 @app.post("/upload")
-async def upload_pdf(file: UploadFile = File(...)):
-    """Recibe el PDF y extrae el texto."""
+async def upload_pdf(file: UploadFile = File(...), use_ocr: bool = False):
+    """Recibe el PDF y extrae el texto. Si use_ocr=True, fuerza OCR."""
     if not file.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Solo se permiten archivos PDF")
     
@@ -115,12 +146,16 @@ async def upload_pdf(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error guardando archivo: {str(e)}")
     
-    # Extraer texto
-    text = extract_text_from_pdf(pdf_path)
+    # Extraer texto (con fallback automático a OCR si no se encuentra texto)
+    # Extraer texto (con fallback automático a OCR si no se encuentra texto)
+    text = extract_text_from_pdf(pdf_path, use_ocr=use_ocr)
+    
+    # Detectar si se usó OCR
+    extraction_method = "OCR" if use_ocr else "auto"
     
     if not text.strip():
         pdf_path.unlink()
-        raise HTTPException(status_code=400, detail="No se pudo extraer texto del PDF. ¿Es un PDF escaneado? Prueba con un PDF que tenga texto seleccionable.")
+        raise HTTPException(status_code=400, detail="No se pudo extraer texto del PDF. Verifica que el PDF no esté corrupto o protegido.")
     
     # Guardar texto para referencia
     text_path = UPLOAD_DIR / f"{job_id}.txt"
@@ -135,7 +170,8 @@ async def upload_pdf(file: UploadFile = File(...)):
         "filename": file.filename,
         "preview": preview,
         "total_chars": len(text),
-        "status": "text_extracted"
+        "status": "text_extracted",
+        "extraction_method": extraction_method
     })
 
 

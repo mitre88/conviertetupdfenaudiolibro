@@ -52,8 +52,15 @@
             <div id="dropzone" class="dropzone rounded-xl p-12 text-center cursor-pointer">
                 <div class="text-6xl mb-4">📄</div>
                 <p class="text-lg text-gray-600 mb-2">Arrastra tu PDF aquí o haz clic para seleccionar</p>
-                <p class="text-sm text-gray-400">PDF con texto seleccionable (no escaneados)</p>
+                <p class="text-sm text-gray-400">PDFs con texto o escaneados (OCR automático)</p>
                 <input type="file" id="file-input" accept=".pdf" class="hidden">
+            </div>
+
+            <div class="mt-4 flex items-center justify-center gap-2">
+                <input type="checkbox" id="force-ocr" class="w-4 h-4 text-blue-600 rounded">
+                <label for="force-ocr" class="text-sm text-gray-600 cursor-pointer">
+                    🔍 Forzar OCR (para PDFs escaneados de baja calidad)
+                </label>
             </div>
 
             <div id="upload-loading" class="hidden mt-6 text-center">
@@ -68,7 +75,7 @@
             
             <div class="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
                 <p class="text-green-700 text-sm">✅ <span id="filename-display"></span> - Texto extraído correctamente</p>
-                <p class="text-green-600 text-xs mt-1"><span id="char-count"></span> caracteres</p>
+                <p class="text-green-600 text-xs mt-1"><span id="char-count"></span> caracteres <span id="extraction-method" class="ml-2 text-blue-600"></span></p>
             </div>
 
             <div class="mb-6">
@@ -180,6 +187,12 @@
 
             const formData = new FormData();
             formData.append('file', file);
+            
+            // Añadir flag OCR si está activado
+            const forceOcr = document.getElementById('force-ocr').checked;
+            if (forceOcr) {
+                formData.append('use_ocr', 'true');
+            }
 
             try {
                 const response = await fetch('/upload', {
@@ -199,6 +212,15 @@
                 document.getElementById('filename-display').textContent = data.filename;
                 document.getElementById('char-count').textContent = data.total_chars.toLocaleString();
                 document.getElementById('text-preview').textContent = data.preview;
+                
+                // Mostrar método de extracción
+                const methodEl = document.getElementById('extraction-method');
+                if (data.extraction_method === 'OCR') {
+                    methodEl.textContent = '(OCR activado)';
+                    methodEl.className = 'ml-2 text-orange-600 font-medium';
+                } else {
+                    methodEl.textContent = '';
+                }
 
                 // Ir al paso 2
                 showStep(2);
@@ -267,6 +289,7 @@
         function resetApp() {
             currentJobId = null;
             fileInput.value = '';
+            document.getElementById('force-ocr').checked = false;
             hideError();
             showStep(1);
         }
