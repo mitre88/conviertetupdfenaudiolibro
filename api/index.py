@@ -17,7 +17,7 @@ TEMP_DIR = Path("/tmp/temp_chunks")
 for d in [UPLOAD_DIR, AUDIO_DIR, TEMP_DIR]:
     d.mkdir(exist_ok=True, parents=True)
 
-# Templates - path absoluto
+# Templates
 BASE_DIR = Path(__file__).parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -133,20 +133,10 @@ async def download_audio(job_id: str):
         media_type="audio/mpeg"
     )
 
-# Handler for Vercel
-import asyncio
-
-# Vercel requires a handler function
-def handler(request, context):
-    return app
-
-# Alternative for ASGI
-from mangum import Adapter
-
-# If mangum is available, use it
+# Vercel handler - must be named 'handler'
 try:
     from mangum import Mangum
     handler = Mangum(app, lifespan="off")
 except ImportError:
-    # Fallback - standard handler
-    pass
+    # Fallback if mangum not installed
+    handler = app
